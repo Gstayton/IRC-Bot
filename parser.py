@@ -20,6 +20,7 @@ class Handler(object):
 	Eventually intended to also handle 
 
 	"""
+	helpDict = {}
 	def called(self, parserQ, client):
 		parserQ = parserQ[0]
 		global irc
@@ -34,6 +35,11 @@ class Handler(object):
 				line = parserQ.get()
 				commands = Commands()
 				commands.handler(*parser.lineParse(line, client))
+				parserQ.task_done()
+	
+	def helpAdd(self, string):
+		pass
+		
 
 class Parser(object):
 	def lineParse(self, line, client):

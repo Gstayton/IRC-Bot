@@ -72,10 +72,12 @@ class Client(SockWrap):
 		self.handler()
 
 	def handler(self):
-		
+		"""
+		When called, initiates and starts threads and adds them to their own queues.
+		"""
+
 		listenQ = Queue.Queue()		
 		listenThread = threading.Thread(name='listener', target=self.listen, args=([listenQ]))
-		listenThread.daemon = False
 		listenThread.start()
 
 		parserQ = Queue.Queue()
@@ -89,6 +91,7 @@ class Client(SockWrap):
 				data = listenQ.get()
 				logging.debug(data)
 				parserQ.put(data)
+				listenQ.task_done()
 
 		
 	def connect(self, connection):
@@ -153,7 +156,7 @@ class Client(SockWrap):
 						logging.debug(e)
 					continue
 				listenQ.put(data)
-
+				
 
 ### Attempt at creating a replaceable Parser class to ensure ReloadParser() was always available.
 ### Reload function is now hardcoded into basic level parser.
