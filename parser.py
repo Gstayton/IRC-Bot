@@ -1,25 +1,39 @@
-"""Parser module. Adds functionality to Parser class.
-Note: Do not overwrite reloadParser() if avoidable"""
+"""
+Takes a line from IRC and runs a given method or simply passes if no command is found.
+
+Parser module. Deals with incoming data from the IRC for command interpretation and wtput handling into the IRC
+Handler class deals with incoming calls from client.py, handing parsing functions off to the Parser class, and then
+passing returns from it to Commands, which handles execution of issued commands.
+"""
 import logging
 import time
 import sys
 import random
 
-class Parser(object):
-	def __init__(self):
-		self.commands = {
-				'status' : self.status,
-				'joinchannel':self.join,
-				'time':self.time,
-				'dice':self.dice,
-				'roll':self.dice,
-				'dick':self.dick,
-				'help':self.helpComm
-				}
+class Handler(object):
+	usr = None
+	msg = None
+	cmd = None
+	opcode = None
+	target = None
+	data = None
+	line = None
+	
+	def called(self, line, client):
+		global irc
+		irc = client
+		logging.debug('Thread starting')
 		
-	def parse(self, line, client):
+		global parser
+		parser = Parser()
+
+		commands = Commands()
+		commands.handler(*parser.lineParse(line, client))
+
+class Parser(object):
+	def lineParse(self, line, client):
+		### In dire need of re-write once Handler is better defined
 		self.irc = client
-		logging.debug("Thread start")
 
 		null, data, msg = line.split(':',2)
 		userInfo, opcode, target = data.split()
@@ -31,47 +45,50 @@ class Parser(object):
 			cmd, msg = msg.split(' ',1)
 		else:
 			cmd = msg
-
-		logging.debug('cmd: '+cmd)
-		logging.debug('op : '+opcode)
-		logging.debug('tgt: '+target)
-
-		lineDict = {
-				'user':user,
-				'msg':msg,
-				'cmd':cmd,
-				'op':opcode,
-				'tgt':target,
-				'data':data,
-				'line':line
-		}
-		
-		logging.debug('Usr: '+lineDict['user'])
-		logging.debug('Msg: '+lineDict['msg'])
-
+		print 'DEBUG', cmd, msg
 		if cmd[0] == '!':
 			try:
-				command = self.commands[cmd.lower()[1:]](lineDict)
-				print command
-				command
+				cmd = cmd.lower()[1:]
+				#command = self.commands[cmd.lower()[1:]](lineDict)
+				#Never change the order of these, if anything needs added, append it to the end of the tuple
+				return cmd, msg, user, target
+
 			except:
 				e = sys.exc_info()
 				logging.debug(e)
+				return 0
 		else:
 			logging.debug('Command not found')
 
-	def status(self, lineDict):
-		self.irc.send('Status OK', lineDict)
-		return 'OK'
 
-	def join(self, lineDict):
-		self.irc.sendRaw('JOIN '+lineDict['msg'])
+class Commands(object):
+	
+	def handler(self, cmd, msg, user, target, *args):
+		commands = {
+			'status' : self.status,
+			'joinchannel':self.join,
+			'time':self.time,
+			'dice':self.dice,
+			'roll':self.dice,
+			'dick':self.dick,
+			'help':self.helpComm
+			}
+		
+		commands[cmd](cmd=cmd, msg=msg, user=user, target=target)	
 
-	def time(self, lineDict):
+	def status(self, target, **_):
+		logging.debug('Status OK')
+		irc.send('Status OK', target)
+
+	def join(self, **_):
+		msg = line[1]
+		irc.sendRaw('JOIN '+msg)
+
+	def time(self, **_):
 		localtime = time.asctime(time.localtime(time.time()))
-		self.irc.send(localtime, lineDict)
+		irc.send(localtime, lineDict)
 
-	def dice(self, line):
+	def dice(self, msg, cmd, **_):
 		dice = line['msg'].split(' ',1)
 		dice = dice[0]
 		if line['msg'] == line ['cmd']:
@@ -88,18 +105,17 @@ class Parser(object):
 		if (sides >= 1) and (sides <= 9999) and (num >= 1) and (num <= 9999):
 			try:
 				roll = sum(random.randrange(sides)+1 for die in range(num))
-				self.irc.send(roll, line)
+				irc.send(roll, line)
 			except:
 				logging.debug('Improper 2nd Argument')
 		else:
 			logging.debug('Invalid Range')
 	
-	def dick(self, line):
-		self.irc.send('Sorry, could not find your dick', line)
+	def dick(self, **_):
+		irc.send('Sorry, could not find your dick', line)
 
-	def helpComm(self, line):
-		print line['op']
-		if line['tgt'] != self.irc.nick:
+	def helpComm(self, target, *_):
+		if target != self.irc.nick:
 			self.irc.send('Please use /msg Omnius !help to avoid cluttering up the channel', line)
 		else:
 			self.irc.send('Current commands are:', line)

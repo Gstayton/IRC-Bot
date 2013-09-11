@@ -1,3 +1,9 @@
+"""
+launcher.py handles the launching and managing of multiple processes for the various server connections of pybot.
+connections is a list of servers that the bot will attempt to connect to, including multiple channels.
+activeConnections is a list of currently active client.py processes, as well as an established pipe to each oth them
+Piping is not currently used, but should be once an overriding command line interface has been established.
+"""
 import sys, time
 import logging
 import Queue
@@ -11,26 +17,30 @@ logging.basicConfig(level=logging.DEBUG,
                     )
 
 class Main(object):
+	"""
+	Takes no arguments, though may eventually be controlled via an external configuration file.
+
+	Stores currently active connections in self.activeConnections.
+
+	Starts client in a seperate process for each server in connections.
+
+	"""
 	activeConnections = {}
 	#[server, port, [#channels],nick]
+	#connections = {
+	#'freenode':['irc.freenode.net',6667,['#Omnius'],'Omnius']
+	#}
 	connections = {
-	'freenode':['irc.freenode.net',6667,['#Omnius'],'Omnius']
-	}
+			'freenode':{'host':'irc.freenode.net','port':6667,'channels':['#Omnius'],'nick':'Omnius'}
+			}
+
 	def start(self):
 		for network in self.connections:
 			parentPipe, childPipe = Pipe()
 			self.activeConnections[network] = {'cPipe':childPipe, 'pPipe':parentPipe}
-			self.activeConnections[network]['process'] = Process(
-			target=client.Client, args=(
-				self.connections[network][0],
-				self.connections[network][1],
-				self.connections[network][2],
-				self.connections[network][3],
-				self.activeConnections[network]['cPipe'],
-				), 
-			name=network
-			)
+			self.activeConnections[network]['process'] = Process(target=client.Client,args=[self.connections[network]])
 			self.activeConnections[network]['process'].start()
+			
 		time.sleep(5)
 
 if __name__ == '__main__':
