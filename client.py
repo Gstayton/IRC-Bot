@@ -77,7 +77,8 @@ class SockWrap(object):
 		logging.debug('Connected')
 		self.sendRaw('NICK %s' % connection['nick'])
 		self.sendRaw('USER Omnius Omnius Omnius :Python IRC by Nathan Thomas')
-		self.sendRaw('PRIVMSG NickServ :IDENTIFY botomnius')
+		f = open('passwd')
+		self.sendRaw('PRIVMSG NickServ :IDENTIFY '+f.read())
 		logging.debug('Identified')
 		#Loop to listen for server confirmation that cloak has been applied
 		while True:
