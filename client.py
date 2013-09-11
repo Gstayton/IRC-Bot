@@ -26,9 +26,11 @@ class SockWrap(object):
 
 	"""
 
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
 	def sendRaw(self, string):
 		"""Takes a single string, adds a carriage return, and sends it over the socket to the IRC network"""
-		self.conn.send(string+'\r\n')
+		self.sock.send(string+'\r\n')
 	
 	def send(self, out, tgt):
 		"""
@@ -41,7 +43,7 @@ class SockWrap(object):
 
 		out = str(out)
 		try:
-			self.conn.send('PRIVMSG '+tgt+' :'+out+'\r\n')
+			self.sock.send('PRIVMSG '+tgt+' :'+out+'\r\n')
 		except:
 			logging.debug('Error in sending')
 
@@ -56,40 +58,6 @@ class SockWrap(object):
 		#else:
 		#	self.conn.send('PRIVMSG '+line['tgt']+' :'+out+'\r\n')
 
-	def connect(self, connection):
-		"""
-		Currently re-working: Takes information about server and connects to it. Makes socket a class variable SockWrap.conn
-
-		connection arg should follow format of a dictionary with entries for:
-			host
-			port
-			channels[#channel1,channel2,etc]
-			nick
-		"""
-
-		self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		try:
-			logging.debug('Attempting to connect to '+connection['host'])
-			self.conn.connect((connection['host'],connection['port']))
-		except:
-			logging.debug('Unable to connect to server host %s' % connection['host'])
-			return(1)
-		logging.debug('Connected')
-		self.sendRaw('NICK %s' % connection['nick'])
-		self.sendRaw('USER Omnius Omnius Omnius :Python IRC by Nathan Thomas')
-		f = open('passwd')
-		self.sendRaw('PRIVMSG NickServ :IDENTIFY '+f.read())
-		logging.debug('Identified')
-		#Loop to listen for server confirmation that cloak has been applied
-		while True:
-			data = self.conn.recv(512)
-			print data
-			if data.find('396 '+connection['nick']) != -1:
-				break
-		for channel in connection['channels']:
-			logging.debug('Joining channels...')
-			self.sendRaw('JOIN %s' % channel)
-			logging.debug('Joined '+channel)
 
 class Client(SockWrap):
 	"""
@@ -101,11 +69,65 @@ class Client(SockWrap):
 	
 	def __init__(self, connection):
 		self.connect(connection)
-		self.listen()
+		self.handler()
 
-	def listen(self):
+	def handler(self):
+		
+		listenQ = Queue.Queue()		
+		listenThread = threading.Thread(name='listener', target=self.listen, args=([listenQ]))
+		listenThread.daemon = False
+		listenThread.start()
+
+		parserQ = Queue.Queue()
+		p = parser.Handler()
+		parsingThread = threading.Thread(name='parser', target=p.called, args=([parserQ],self))
+		parsingThread.start()
+		
+		while True:
+			if listenQ.qsize() != 0:
+				logging.debug('Queue Stuff')
+				data = listenQ.get()
+				logging.debug(data)
+				parserQ.put(data)
+
+		
+	def connect(self, connection):
 		"""
-		When invoked, listens over Client.conn for data to pass to parser.Handler()
+		Currently re-working: Takes information about server and connects to it. Makes socket a class variable SockWrap.conn
+
+		connection arg should follow format of a dictionary with entries for:
+			host
+			port
+			channels[#channel1,channel2,etc]
+			nick
+		"""
+
+		try:
+			logging.debug('Attempting to connect to '+connection['host'])
+			self.sock.connect((connection['host'],connection['port']))
+		except:
+			logging.debug('Unable to connect to server host %s' % connection['host'])
+			return(1)
+		logging.debug('Connected')
+		self.sendRaw('NICK %s' % connection['nick'])
+		self.sendRaw('USER Omnius Omnius Omnius :Python IRC by Nathan Thomas')
+		f = open('passwd')
+		self.sendRaw('PRIVMSG NickServ :IDENTIFY '+f.read())
+		logging.debug('Identified')
+		#Loop to listen for server confirmation that cloak has been applied
+		while True:
+			data = self.sock.recv(512)
+			print data
+			if data.find('396 '+connection['nick']) != -1:
+				break
+		for channel in connection['channels']:
+			logging.debug('Joining channels...')
+			self.sendRaw('JOIN %s' % channel)
+			logging.debug('Joined '+channel)
+	
+	def listen(self, listenQ):
+		"""
+		When invoked, listens over Client.sock for data to pass to parser.Handler()
 		
 		Be sure to have all the rest of the configuration finished before calling this method, as it is intended to run 
 		indefinitely until the connection is closed.
@@ -114,8 +136,9 @@ class Client(SockWrap):
 		reload(parser) can be called from inside the IRC via #!ReloadParser, to ensure that there is always a way to 
 		get the main functionality up and running even if it fails to load on initial import.
 		"""
+		
 		while True:
-			data = self.conn.recv(512)
+			data = self.sock.recv(512)
 			print data
 
 			if data.find('PING') != -1:
@@ -129,12 +152,7 @@ class Client(SockWrap):
 						e = sys.exc_info()
 						logging.debug(e)
 					continue
-				logging.debug('Starting parser thread')
-				# Launch Handler class into seperate thread of control (Possibly a queue?)
-				p = parser.Handler()
-				parseThread = threading.Thread(name='parser', target=p.called, args=(data, self))
-				parseThread.daemon = True
-				parseThread.start()
+				listenQ.put(data)
 
 
 ### Attempt at creating a replaceable Parser class to ensure ReloadParser() was always available.

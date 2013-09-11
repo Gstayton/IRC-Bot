@@ -11,24 +11,29 @@ import sys
 import random
 
 class Handler(object):
-	usr = None
-	msg = None
-	cmd = None
-	opcode = None
-	target = None
-	data = None
-	line = None
-	
-	def called(self, line, client):
+	"""
+	Always start new threads with Handler.called
+
+	A general handler class, which deals with initial passing of arguments to parser. Also handles initialization of both
+	Parser and Commands.
+
+	Eventually intended to also handle 
+
+	"""
+	def called(self, parserQ, client):
+		parserQ = parserQ[0]
 		global irc
 		irc = client
-		logging.debug('Thread starting')
+		logging.debug('Parser Module')
 		
 		global parser
 		parser = Parser()
-
-		commands = Commands()
-		commands.handler(*parser.lineParse(line, client))
+		
+		while True:
+			if parserQ.qsize() != 0:
+				line = parserQ.get()
+				commands = Commands()
+				commands.handler(*parser.lineParse(line, client))
 
 class Parser(object):
 	def lineParse(self, line, client):
@@ -56,7 +61,7 @@ class Parser(object):
 			except:
 				e = sys.exc_info()
 				logging.debug(e)
-				return 0
+				return False
 		else:
 			logging.debug('Command not found')
 
